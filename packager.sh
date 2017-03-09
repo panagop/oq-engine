@@ -101,6 +101,8 @@ sig_hand () {
         scp "${lxc_ip}:/tmp/webui*" "out_${BUILD_UBUVER}/"
         scp "${lxc_ip}:/tmp/celeryd.log" "out_${BUILD_UBUVER}/celeryd.log"
         scp "${lxc_ip}:ssh.log" "out_${BUILD_UBUVER}/ssh.history"
+        scp "${lxc_ip}:/tmp/dbserver.log" "out_${BUILD_UBUVER}/" || true
+        ssh  ${lxc_ip} "cat /tmp/dbserver.log" || true
         echo "Destroying [$lxc_name] lxc"
         sudo $LXC_KILL -n $lxc_name
         sudo lxc-destroy -n $lxc_name
