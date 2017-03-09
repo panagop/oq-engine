@@ -24,7 +24,7 @@ import os.path
 import logging
 import subprocess
 from multiprocessing.connection import Listener
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 
 from openquake.baselib import sap
 from openquake.baselib.parallel import safely_call
@@ -34,10 +34,14 @@ from openquake.server.db import actions
 from openquake.server import dbapi
 from openquake.server.settings import DATABASE
 
-# using a ThreadPool because SQLite3 isn't fork-safe on macOS Sierra
+# using a ThreadPool on macOS because SQLite3 isn't fork-safe on Sierra
+# keep using processes on other platform because it's better supported
+# and has no issues with GIL
 # ref: https://bugs.python.org/issue27126
-executor = ThreadPoolExecutor(1)
-
+if sys.platform == 'darwin':
+    executor = ThreadPoolExecutor(1)
+else
+    executor = ProcessPoolExecutor(1)
 
 class DbServer(object):
     """
