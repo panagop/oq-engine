@@ -121,7 +121,7 @@ def _get_base_url(request):
     return base_url
 
 
-def _prepare_job(request, hazard_job_id, candidates):
+def _prepare_job(request, job_id, candidates):
     """
     Creates a temporary directory, move uploaded files there and
     select the job file by looking at the candidate names.
@@ -377,21 +377,17 @@ def run_calc(request):
 
     :param request:
         a `django.http.HttpRequest` object.
-        If the request has the attribute `hazard_job_id`, the results of the
-        specified hazard calculations will be re-used as input by the risk
+        If the request has the attribute `job_id`, the results of the
+        specified calculation will be re-used as input by the current
         calculation.
         The request also needs to contain the files needed to perform the
         calculation. They can be uploaded as separate files, or zipped
         together.
     """
-    hazard_job_id = request.POST.get('hazard_job_id')
-
-    if hazard_job_id:
-        candidates = ("job_risk.ini", "job.ini")
-    else:
-        candidates = ("job_hazard.ini", "job_haz.ini", "job.ini")
+    job_id = request.POST.get('job_id')
+    candidates = ("job.ini", )
     einfo, exctype, monitor = safely_call(
-        _prepare_job, (request, hazard_job_id, candidates))
+        _prepare_job, (request, job_id, candidates))
     if exctype:
         return HttpResponse(json.dumps(einfo.splitlines()),
                             content_type=JSON, status=500)
@@ -403,7 +399,7 @@ def run_calc(request):
 
     user = utils.get_user_data(request)
     try:
-        job_id, fut = submit_job(einfo[0], user['name'], hazard_job_id)
+        job_id, fut = submit_job(einfo[0], user['name'], job_id)
         # restart the process pool at the end of each job
         fut .add_done_callback(lambda f: Starmap.restart())
     except Exception as exc:  # no job created, for instance missing .xml file
@@ -419,15 +415,15 @@ def run_calc(request):
                         status=status)
 
 
-def submit_job(job_ini, user_name, hazard_job_id=None,
+def submit_job(job_ini, user_name, job_id=None,
                loglevel=DEFAULT_LOG_LEVEL, logfile=None, exports=''):
     """
     Create a job object from the given job.ini file in the job directory
     and submit it to the job queue. Returns the job ID.
     """
-    job_id, oqparam = engine.job_from_file(job_ini, user_name, hazard_job_id)
+    job_id, oqparam = engine.job_from_file(job_ini, user_name, job_id)
     fut = executor.submit(engine.run_calc, job_id, oqparam, loglevel,
-                          logfile, exports, hazard_job_id)
+                          logfile, exports, job_id)
     return job_id, fut
 
 
