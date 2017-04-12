@@ -15,6 +15,7 @@
 
 #  You should have received a copy of the GNU Affero General Public License
 #  along with OpenQuake.  If not, see <http://www.gnu.org/licenses/>.
+import numpy
 from openquake.baselib.python3compat import decode
 from openquake.commonlib import writers
 
@@ -39,6 +40,7 @@ class LossCurveExporter(object):
     ref-a1/quantile-0.1    # export quantile loss curves of asset a1
     """
     def __init__(self, dstore):
+        oq = dstore['oqparam']
         self.dstore = dstore
         self.assetcol = dstore['assetcol']
         arefs = [decode(aref) for aref in self.dstore['asset_refs']]
@@ -46,17 +48,21 @@ class LossCurveExporter(object):
         self.asset_refs = self.dstore['asset_refs'].value
         self.loss_types = dstore.get_attr('composite_risk_model', 'loss_types')
         self.R = len(dstore['realizations'])
+        self.stats = ['mean'] + [
+            'quantile-%s' % q for q in oq.quantile_loss_curves]
+        self.S = len(self.stats)
+        self.stat2idx = {stat: i for i, stat in enumerate(self.stats)}
 
     def parse(self, what):
         """
         :param what:
-            can be 'ref-asset1/rlz-1', 'sid-1/rlz-2', ...
+            can be 'rlz-1/ref-asset1', 'rlzs/sid-2', ...
         """
-        spec, key = what.split('/')
+        kind, spec = what.split('/')
         if not spec.startswith(('ref-', 'sid-')):
             raise ValueError('Wrong specification in %s' % what)
-        if not (key in ('rlzs', 'stats', 'mean') or key.startswith(('rlz-')) or
-                key.startswith('quantile-')):
+        if not (kind in ('rlzs', 'stats', 'mean') or kind.startswith(('rlz-'))
+                or kind.startswith('quantile-')):
             raise ValueError('Wrong export key in %s' % what)
         if spec.startswith('sid-'):  # passed the site ID
             sid = int(spec[4:])
@@ -69,11 +75,13 @@ class LossCurveExporter(object):
         else:  # passed the asset name
             arefs = [spec[4:]]
             aids = [self.str2asset[arefs[0]].ordinal]
-        return aids, arefs, spec, key
+        return aids, arefs, spec, kind
 
-    def export_csv(self, spec, asset_refs, curves_dict):
+    def export_csv(self, kind, spec, asset_refs, curves_dict):
         """
-        :param asset_ref: name of the asset
+        :param kind: kind of curves to export (rlzs, stats)
+        :param spec: specific asset or site to export
+        :param asset_refs: names of the assets
         :param curves_dict: a dictionary tag -> loss curves
         """
         writer = writers.CsvWriter(fmt=writers.FIVEDIGITS)
@@ -91,46 +99,47 @@ class LossCurveExporter(object):
             writer.save(data, dest)
         return writer.getsaved()
 
+    def export_npz(self, kind, spec, asset_refs, curves_dict):
+        """
+        :param kind: kind of curves to export (rlzs, stats)
+        :param spec: specific asset or site to export
+        :param asset_refs: names of the assets
+        :param curves_dict: a dictionary tag -> loss curves
+        """
+        dest = self.dstore.build_fname('loss_curves-' + kind, spec, 'npz')
+        numpy.savez_compressed(dest, asset_refs=asset_refs, **curves_dict)
+        return [dest]
+
     def export(self, export_type, what):
         """
         :param export_type: 'csv', 'json', ...
         :param what: string describing what to export
         :returns: list of exported file names
         """
-        aids, arefs, spec, key = self.parse(what)
-        if not key or key.startswith('rlz-'):
-            curves = self.export_curves_rlzs(aids, key)
-        else:  # statistical exports
-            curves = self.export_curves_stats(aids, key)
-        return getattr(self, 'export_' + export_type)(spec, arefs, curves)
+        aids, arefs, spec, kind = self.parse(what)
+        curves = self.export_curves(aids, kind)
+        return getattr(self, 'export_' + export_type)(
+            kind, spec, arefs, curves)
 
-    def export_curves_rlzs(self, aids, key):
+    def export_curves(self, aids, kind):
         """
-        :returns: a dictionary key -> record of dtype loss_curve_dt
+        :returns: a dictionary kind -> record of dtype loss_curve_dt
         """
-        if 'loss_curves-rlzs' in self.dstore:  # classical_risk
+        if kind.startswith('rlz'):  # individual outputs
             data = self.dstore['loss_curves-rlzs'][aids]  # shape (A, R)
-            if key:
-                rlzi = int(key[4:])
-                return {key: data[:, rlzi]}
-            return {'rlz-%03d' % rlzi: data[:, rlzi] for rlzi in range(self.R)}
-        # otherwise event_based
-        raise NotImplementedError
-
-    def export_curves_stats(self, aids, key):
-        """
-        :returns: a dictionary rlzi -> record of dtype loss_curve_dt
-        """
-        oq = self.dstore['oqparam']
-        stats = ['mean'] + ['quantile-%s' % q for q in oq.quantile_loss_curves]
-        stat2idx = {stat: s for s, stat in enumerate(stats)}
-        if 'loss_curves-stats' in self.dstore:  # classical_risk
-            dset = self.dstore['loss_curves-stats']
-            data = dset[aids]  # shape (A, S)
-            if key == 'stats':
-                return {stat: data[:, s] for s, stat in enumerate(stats)}
-            else:  # a specific statistics
-                return {key: data[stat2idx[key]]}
+            if kind == 'rlzs':
+                return {'rlz-%03d' % rlzi: data[:, rlzi]
+                        for rlzi in range(self.R)}
+            else:
+                rlzi = int(kind[4:])
+                return {kind: data[:, rlzi]}
+        else:  # statistical outputs
+            data = self.dstore['loss_curves-stats'][aids]  # shape (A, R)
+            if kind == 'stats':
+                return {self.stats[s]: data[:, s] for s in range(self.S)}
+            else:
+                s = self.stat2idx[kind]
+                return {kind: data[:, s]}
 
         # otherwise event_based
         raise NotImplementedError

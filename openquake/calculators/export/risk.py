@@ -294,12 +294,13 @@ def export_rcurves(ekey, dstore):
 
 
 # this is used by classical_risk
-@export.add(('loss_curves', 'csv'))
+@export.add(('loss_curves', 'csv'), ('loss_curves', 'npz'))
 def export_loss_curves(ekey, dstore):
-    if '/' not in ekey[0]:  # full loss curves are not exportable
+    key, etype = ekey
+    if '/' not in key:  # full loss curves are not exportable
         return []
-    what = ekey[0].split('/', 1)[1]
-    return loss_curves.LossCurveExporter(dstore).export('csv', what)
+    what = key.split('/', 1)[1]
+    return loss_curves.LossCurveExporter(dstore).export(etype, what)
 
 
 @export.add(('dmg_by_asset', 'xml'))
