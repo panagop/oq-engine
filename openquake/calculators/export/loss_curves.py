@@ -26,13 +26,13 @@ class LossCurveExporter(object):
     and `what` is a string called export specifier. Here are some examples
     for the export specifier:
 
-    sid-42/   # export loss curves of site #42 for all realizations
+    sid-42/rlzs   # export loss curves of site #42 for all realizations
     sid-42/rlz-003   # export all loss curves of site #42, realization #3
     sid-42/stats   # export statistical loss curves of site #42
     sid-42/mean   # export mean loss curves of site #42
     sid-42/quantile-0.1   # export quantile loss curves of site #42
 
-    ref-a1/   # export loss curves of asset a1 for all realizations
+    ref-a1/rlzs  # export loss curves of asset a1 for all realizations
     ref-a1/rlz-003   # export loss curves of asset a1, realization 3
     ref-a1/stats     # export statistical loss curves of asset a1
     ref-a1/mean     # export mean loss curves of asset a1
@@ -55,7 +55,7 @@ class LossCurveExporter(object):
         spec, key = what.split('/')
         if not spec.startswith(('ref-', 'sid-')):
             raise ValueError('Wrong specification in %s' % what)
-        if not (key in ('', 'stats', 'mean') or key.startswith(('rlz-')) or
+        if not (key in ('rlzs', 'stats', 'mean') or key.startswith(('rlz-')) or
                 key.startswith('quantile-')):
             raise ValueError('Wrong export key in %s' % what)
         if spec.startswith('sid-'):  # passed the site ID

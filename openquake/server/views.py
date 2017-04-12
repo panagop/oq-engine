@@ -566,6 +566,34 @@ def get_result(request, result_id):
 
 @cross_domain_ajax
 @require_http_methods(['GET'])
+def get_loss_curves(request, job_id, spec, key):
+    """
+    Download loss curves
+
+    :param request:
+        `django.http.HttpRequest` object.
+    :param job_id:
+        The id of the requested datastore
+    :param spec:
+        What kind of curves to download (sid-<number> or ref-<assets>)
+    :param key:
+        Further restriction (mean, quantile, stats or '')
+    :returns:
+        A `django.http.HttpResponse` containing the content
+        of the requested artifact, if present, else throws a 404
+    """
+    try:
+        job = logs.dbcmd('get_job', int(job_id), getpass.getuser())
+    except dbapi.NotFound:
+        return HttpResponseNotFound()
+
+    fnames = export(('loss_curves/%s/%s' + (spec, key), 'csv'))
+    print(fnames)
+    return response
+
+
+@cross_domain_ajax
+@require_http_methods(['GET'])
 def get_datastore(request, job_id):
     """
     Download a full datastore file.
