@@ -587,7 +587,7 @@ def get_loss_curves(request, job_id, spec, key):
     except dbapi.NotFound:
         return HttpResponseNotFound()
 
-    fnames = export(('loss_curves/%s/%s' + (spec, key), 'csv'))
+    fnames = export(('loss_curves/%s/%s' % (spec, key), 'csv'))
     print(fnames)
     return response
 
