@@ -17,6 +17,7 @@
 # along with OpenQuake. If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import division
+import os
 import re
 import copy
 import math
@@ -173,9 +174,9 @@ class RlzsAssoc(collections.Mapping):
 
     def get_rlzs_by_gsim(self, grp_id):
         """
-        Returns a dictionary gsim > rlzs for the given grp_id
+        Returns an orderd dictionary gsim > rlzs for the given grp_id
         """
-        rlzs_by_gsim = {}
+        rlzs_by_gsim = collections.OrderedDict()
         for gid, gsim in sorted(self.rlzs_assoc):
             if gid == grp_id:
                 rlzs_by_gsim[gsim] = self[gid, gsim]
@@ -335,6 +336,7 @@ class CompositionInfo(object):
                      tot_weight=self.tot_weight))
 
     def __fromh5__(self, dic, attrs):
+        # TODO: this is called more times than needed, maybe we should cache it
         sg_data = group_array(dic['sg_data'], 'sm_id')
         sm_data = dic['sm_data']
         vars(self).update(attrs)
@@ -370,6 +372,10 @@ class CompositionInfo(object):
                 rec['name'], rec['weight'], path, srcgroups,
                 num_gsim_paths, sm_id, rec['samples'])
             self.source_models.append(sm)
+        try:
+            os.remove(tmp)  # gsim_lt file
+        except NameError:  # tmp is defined only in the regular case, see above
+            pass
 
     def get_num_rlzs(self, source_model=None):
         """
@@ -633,6 +639,13 @@ class CompositeSourceModel(collections.Sequence):
         ct = concurrent_tasks or 1
         return max(math.ceil(self.weight / ct), MAXWEIGHT)
 
+    def add_infos(self, sources):
+        """
+        Populate the .infos dictionary (grp_id, src_id) -> <SourceInfo>
+        """
+        for src in sources:
+            self.infos[src.src_group_id, src.source_id] = SourceInfo(src)
+
     def split_sources(self, sources, src_filter, maxweight=MAXWEIGHT):
         """
         Split a set of sources of the same source group; light sources
@@ -644,14 +657,13 @@ class CompositeSourceModel(collections.Sequence):
         :yields: blocks of sources of weight around maxweight
         """
         light = [src for src in sources if src.weight <= maxweight]
-        for src in light:
-            self.infos[src.src_group_id, src.source_id] = SourceInfo(src)
+        self.add_infos(light)
         for block in block_splitter(
                 light, maxweight, weight=operator.attrgetter('weight')):
             yield block
         heavy = [src for src in sources if src.weight > maxweight]
+        self.add_infos(heavy)
         for src in heavy:
-            self.infos[src.src_group_id, src.source_id] = SourceInfo(src)
             srcs = sourceconverter.split_filter_source(src, src_filter)
             if len(srcs) > 1:
                 logging.info(

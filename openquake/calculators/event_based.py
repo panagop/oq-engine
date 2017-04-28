@@ -483,10 +483,13 @@ class EventBasedCalculator(ClassicalCalculator):
         oq = self.oqparam
         if not oq.hazard_curves_from_gmfs and not oq.ground_motion_fields:
             return
-        ruptures_by_grp = (self.precalc.result if self.precalc
-                           else get_ruptures_by_grp(self.datastore.parent))
         if self.oqparam.ground_motion_fields:
             calc.check_overflow(self)
+
+        with self.monitor('reading ruptures', autoflush=True):
+            ruptures_by_grp = (self.precalc.result if self.precalc
+                               else get_ruptures_by_grp(self.datastore.parent))
+
         self.sm_id = {tuple(sm.path): sm.ordinal
                       for sm in self.csm.info.source_models}
         L = len(oq.imtls.array)
@@ -532,14 +535,13 @@ class EventBasedCalculator(ClassicalCalculator):
             # compute and save statistics; this is done in process
             # we don't need to parallelize, since event based calculations
             # involves a "small" number of sites (<= 65,536)
-            weights = (None if self.oqparam.number_of_logic_tree_samples
-                       else [rlz.weight for rlz in rlzs])
-            pstats = PmapStats(self.oqparam.quantile_hazard_curves, weights)
-            for kind, stat in pstats.compute(
-                    self.sitecol.sids, list(result.values())):
-                if kind == 'mean' and not self.oqparam.mean_hazard_curves:
-                    continue
-                self.datastore['hcurves/' + kind] = stat
+            weights = [rlz.weight for rlz in rlzs]
+            hstats = self.oqparam.hazard_stats()
+            if len(hstats) and len(rlzs) > 1:
+                pstats = PmapStats(hstats, weights)
+                for kind, stat in pstats.compute(
+                        self.sitecol.sids, list(result.values())):
+                    self.datastore['hcurves/' + kind] = stat
         if os.path.exists(self.datastore.ext5path):
             self.save_gmf_bytes()
         if oq.compare_with_classical:  # compute classical curves
@@ -548,7 +550,7 @@ class EventBasedCalculator(ClassicalCalculator):
                 os.makedirs(export_dir)
             oq.export_dir = export_dir
             # one could also set oq.number_of_logic_tree_samples = 0
-            self.cl = ClassicalCalculator(oq, self.monitor)
+            self.cl = ClassicalCalculator(oq, self.monitor('classical'))
             # TODO: perhaps it is possible to avoid reprocessing the source
             # model, however usually this is quite fast and do not dominate
             # the computation

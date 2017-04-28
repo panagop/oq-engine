@@ -18,6 +18,7 @@
 import numpy
 from openquake.baselib.python3compat import decode
 from openquake.commonlib import writers
+from openquake.risklib import riskinput
 
 
 class LossCurveExporter(object):
@@ -140,6 +141,5 @@ class LossCurveExporter(object):
             else:
                 s = self.stat2idx[kind]
                 return {kind: data[:, s]}
-
         # otherwise event_based
         raise NotImplementedError

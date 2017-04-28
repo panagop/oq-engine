@@ -18,13 +18,14 @@
 
 import os
 import logging
+import functools
 import numpy
 
 from openquake.baselib import parallel
 from openquake.baselib.general import DictArray
 from openquake.hazardlib.imt import from_string
-from openquake.hazardlib import correlation
-from openquake.hazardlib import valid
+from openquake.hazardlib import correlation, stats
+from openquake.hazardlib import valid, InvalidFile
 from openquake.commonlib import logictree
 from openquake.commonlib.riskmodels import get_risk_files
 
@@ -40,7 +41,7 @@ class OqParam(valid.ParamSet):
         z2pt5='reference_depth_to_2pt5km_per_sec',
         backarc='reference_backarc',
     )
-    all_losses = valid.Param(valid.boolean, False)
+    asset_loss_table = valid.Param(valid.boolean, False)
     area_source_discretization = valid.Param(
         valid.NoneOr(valid.positivefloat), None)
     asset_correlation = valid.Param(valid.NoneOr(valid.FloatRange(0, 1)), 0)
@@ -88,7 +89,10 @@ class OqParam(valid.ParamSet):
     master_seed = valid.Param(valid.positiveint, 0)
     maximum_distance = valid.Param(valid.maximum_distance)  # km
     asset_hazard_distance = valid.Param(valid.positivefloat, 5)  # km
+    max_hazard_curves = valid.Param(valid.boolean, False)
     mean_hazard_curves = valid.Param(valid.boolean, False)
+    max_loss_curves = valid.Param(valid.boolean, False)
+    mean_loss_curves = valid.Param(valid.boolean, True)
     minimum_intensity = valid.Param(valid.floatdict, {})  # IMT -> minIML
     number_of_ground_motion_fields = valid.Param(valid.positiveint)
     number_of_logic_tree_samples = valid.Param(valid.positiveint, 0)
@@ -162,14 +166,24 @@ class OqParam(valid.ParamSet):
             delattr(self, 'intensity_measure_types')
         self._file_type, self._risk_files = get_risk_files(self.inputs)
 
-        # check the IMTs vs the GSIMs
+        # check the gsim_logic_tree
         if 'gsim_logic_tree' in self.inputs:
             if self.gsim:
                 raise ValueError('If `gsim_logic_tree_file` is set, there '
                                  'must be no `gsim` key')
             path = os.path.join(
                 self.base_path, self.inputs['gsim_logic_tree'])
-            self._gsims_by_trt = logictree.GsimLogicTree(path, ['*']).values
+            gsim_lt = logictree.GsimLogicTree(path, ['*'])
+
+            # check the number of branchsets
+            branchsets = len(gsim_lt._ltnode)
+            if 'scenario' in self.calculation_mode and branchsets > 1:
+                raise InvalidFile(
+                    '%s for a scenario calculation must contain a single '
+                    'branchset, found %d!' % (path, branchsets))
+
+            # check the IMTs vs the GSIMs
+            self._gsims_by_trt = gsim_lt.values
             for gsims in self._gsims_by_trt.values():
                 self.check_gsims(gsims)
         elif self.gsim is not None:
@@ -189,6 +203,17 @@ class OqParam(valid.ParamSet):
                     'iml_disagg=%s will not be computed from poes_disagg=%s',
                     str(self.iml_disagg), self.poes_disagg)
 
+        # checks for classical_damage
+        if self.calculation_mode == 'classical_damage':
+            if self.quantile_loss_curves:
+                raise ValueError('quantile_loss_curves are not defined '
+                                 'for classical_damage calculations: '
+                                 'remove them for the .ini file')
+            if self.conditional_loss_poes:
+                raise ValueError('conditional_loss_poes are not defined '
+                                 'for classical_damage calculations: '
+                                 'remove them for the .ini file')
+        
         # checks for event_based_risk
         if (self.calculation_mode == 'event_based_risk'
                 and self.asset_correlation not in (0, 1)):
@@ -340,6 +365,42 @@ class OqParam(valid.ParamSet):
         correl_model_cls = getattr(
             correlation, '%sCorrelationModel' % correl_name)
         return correl_model_cls(**self.ground_motion_correlation_params)
+
+    def hazard_stats(self):
+        """
+        Return a list of item with the statistical functions defined for the
+        hazard calculation
+        """
+        names = []  # name of statistical functions
+        funcs = []  # statistical functions of kind func(values, weights)
+        if self.mean_hazard_curves:
+            names.append('mean')
+            funcs.append(stats.mean_curve)
+        for q in self.quantile_hazard_curves:
+            names.append('quantile-%s' % q)
+            funcs.append(functools.partial(stats.quantile_curve, q))
+        if self.max_hazard_curves:
+            names.append('max')
+            funcs.append(stats.max_curve)
+        return list(zip(names, funcs))
+
+    def risk_stats(self):
+        """
+        Return a list of items with the statistical functions defined for the
+        risk calculation
+        """
+        names = []  # name of statistical functions
+        funcs = []  # statistical functions of kind func(values, weights)
+        if self.mean_loss_curves:
+            names.append('mean')
+            funcs.append(stats.mean_curve)
+        for q in self.quantile_loss_curves:
+            names.append('quantile-%s' % q)
+            funcs.append(functools.partial(stats.quantile_curve, q))
+        if self.max_loss_curves:
+            names.append('max')
+            funcs.append(stats.max_curve)
+        return list(zip(names, funcs))
 
     @property
     def job_type(self):

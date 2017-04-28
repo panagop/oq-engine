@@ -81,9 +81,9 @@ def export_avg_losses(ekey, dstore):
     name, kind = ekey[0].split('-')
     value = dstore[name + '-rlzs'].value  # shape (A, R, L')
     if kind == 'stats':
-        tags = ['mean'] + ['quantile-%s' % q for q in oq.quantile_loss_curves]
         weights = dstore['realizations']['weight']
-        value = compute_stats2(value, oq.quantile_loss_curves, weights)
+        tags, stats = zip(*oq.risk_stats())
+        value = compute_stats2(value, stats, weights)
     else:  # rlzs
         tags = ['rlz-%03d' % r for r in range(len(dstore['realizations']))]
     for tag, values in zip(tags, value.transpose(1, 0, 2)):
@@ -145,7 +145,8 @@ def export_losses_by_asset_npz(ekey, dstore):
     assets = get_assets(dstore)
     dic = {}
     for rlz in rlzs:
-        losses = losses_by_asset[:, rlz.ordinal]['mean'].copy()
+        # I am exporting the 'mean' and ignoring the 'stddev'
+        losses = losses_by_asset[:, rlz.ordinal]['mean'].copy()  # shape (N, 1)
         data = compose_arrays(assets, losses.view(loss_dt)[:, 0])
         dic['rlz-%03d' % rlz.ordinal] = data
     fname = dstore.export_path('%s.%s' % ekey)
@@ -418,6 +419,26 @@ def export_loss_maps_csv(ekey, dstore):
     return writer.getsaved()
 
 
+# used by classical_risk and event_based_risk
+@export.add(('loss_maps-rlzs', 'npz'), ('loss_maps-stats', 'npz'))
+def export_loss_maps_npz(ekey, dstore):
+    kind = ekey[0].split('-')[1]  # rlzs or stats
+    assets = get_assets(dstore)
+    value = get_loss_maps(dstore, kind)
+    R = len(dstore['realizations'])
+    if kind == 'rlzs':
+        tags = ['rlz-%03d' % r for r in range(R)]
+    else:
+        oq = dstore['oqparam']
+        tags = ['mean'] + ['quantile-%s' % q for q in oq.quantile_loss_curves]
+    fname = dstore.export_path('%s.%s' % ekey)
+    dic = {}
+    for tag, values in zip(tags, value.T):
+        dic[tag] = compose_arrays(assets, values)
+    savez(fname, **dic)
+    return [fname]
+
+
 @export.add(('damages-rlzs', 'csv'))
 def export_rlzs_by_asset_csv(ekey, dstore):
     rlzs = dstore['csm_info'].get_rlzs_assoc().realizations
@@ -563,31 +584,16 @@ def get_loss_maps(dstore, kind):
     :param kind: 'rlzs' or 'stats'
     """
     oq = dstore['oqparam']
-    name = 'rcurves-%s' % kind
+    name = 'loss_maps-%s' % kind
     if name in dstore:  # event_based risk
-        values = dstore['assetcol'].values()
-        _, loss_maps_dt = scientific.build_loss_dtypes(
-            {lt: len(oq.loss_ratios[lt]) for lt in oq.loss_ratios},
-            oq.conditional_loss_poes, oq.insured_losses)
-        rcurves = dstore[name].value  # to support Ubuntu 14
-        A, R, I = rcurves.shape
-        ins = ['', '_ins']
-        loss_maps = numpy.zeros((A, R), loss_maps_dt)
-        for ltype, lratios in oq.loss_ratios.items():
-            for (a, r, i) in indices(A, R, I):
-                rcurve = rcurves[ltype][a, r, i]
-                losses = numpy.array(lratios) * values[ltype][a]
-                tup = tuple(
-                    scientific.conditional_loss_ratio(losses, rcurve, poe)
-                    for poe in oq.conditional_loss_poes)
-                loss_maps[ltype + ins[i]][a, r] = tup
-        return loss_maps
+        return dstore[name].value
     name = 'loss_curves-%s' % kind
     if name in dstore:  # classical_risk
         loss_curves = dstore[name]
-    loss_maps = scientific.broadcast(
-        scientific.loss_maps, loss_curves, oq.conditional_loss_poes)
-    return loss_maps
+        loss_maps = scientific.broadcast(
+            scientific.loss_maps, loss_curves, oq.conditional_loss_poes)
+        return loss_maps
+    raise KeyError('loss_maps/loss_curves missing in %s' % dstore)
 
 
 # used by event_based_risk and classical_risk
@@ -613,26 +619,24 @@ def export_loss_maps_rlzs_xml_geojson(ekey, dstore):
         for r in range(R):
             lmaps = loss_maps_lt[:, r]
             for poe in oq.conditional_loss_poes:
-                for insflag in range(oq.insured_losses + 1):
-                    ins = '_ins' if insflag else ''
-                    rlz = rlzs[r]
-                    unit = unit_by_lt[lt]
-                    root = ekey[0][:-5]  # strip -rlzs
-                    name = '%s-%s-poe-%s%s' % (root, lt, poe, ins)
-                    fname = dstore.build_fname(name, rlz, ekey[1])
-                    data = []
-                    poe_str = 'poe-%s' % poe + ins
-                    for ass, stat in zip(assetcol, lmaps[poe_str]):
-                        loc = Location(ass['lon'], ass['lat'])
-                        lm = LossMap(loc, decode(aref[ass['idx']]), stat, None)
-                        data.append(lm)
-                    writer = writercls(
-                        fname, oq.investigation_time, poe=poe, loss_type=lt,
-                        unit=unit,
-                        risk_investigation_time=oq.risk_investigation_time,
-                        **get_paths(rlz))
-                    writer.serialize(data)
-                    fnames.append(fname)
+                rlz = rlzs[r]
+                unit = unit_by_lt[lt[:-4] if lt.endswith('_ins') else lt]
+                root = ekey[0][:-5]  # strip -rlzs
+                name = '%s-%s-poe-%s' % (root, lt, poe)
+                fname = dstore.build_fname(name, rlz, ekey[1])
+                data = []
+                poe_str = 'poe-%s' % poe
+                for ass, stat in zip(assetcol, lmaps[poe_str]):
+                    loc = Location(ass['lon'], ass['lat'])
+                    lm = LossMap(loc, decode(aref[ass['idx']]), stat, None)
+                    data.append(lm)
+                writer = writercls(
+                    fname, oq.investigation_time, poe=poe, loss_type=lt,
+                    unit=unit,
+                    risk_investigation_time=oq.risk_investigation_time,
+                    **get_paths(rlz))
+                writer.serialize(data)
+                fnames.append(fname)
     return sorted(fnames)
 
 
@@ -655,9 +659,9 @@ def export_loss_maps_stats_xml_geojson(ekey, dstore):
         ins = '_ins' if insflag else ''
         if ltype not in loss_maps.dtype.names:
             continue
-        array = loss_maps[ltype][:, s]
+        array = loss_maps[ltype + ins][:, s]
         curves = []
-        poe_str = 'poe-%s' % poe + ins
+        poe_str = 'poe-%s' % poe
         for ass, val in zip(assetcol, array[poe_str]):
             loc = Location(ass['lon'], ass['lat'])
             curve = LossMap(loc, decode(aref[ass['idx']]), val, None)
@@ -866,9 +870,9 @@ def export_losses_by_taxon_csv(ekey, dstore):
     key, kind = ekey[0].split('-')
     value = dstore[key + '-rlzs'].value
     if kind == 'stats':
-        tags = ['mean'] + ['quantile-%s' % q for q in oq.quantile_loss_curves]
         weights = dstore['realizations']['weight']
-        value = compute_stats2(value, oq.quantile_loss_curves, weights)
+        tags, stats = zip(*oq.risk_stats())
+        value = compute_stats2(value, stats, weights)
     else:  # rlzs
         tags = rlzs
     writer = writers.CsvWriter(fmt=writers.FIVEDIGITS)
@@ -950,5 +954,32 @@ def export_bcr_map_rlzs(ekey, dstore):
             writer.serialize(data)
             fnames.append(path)
     return sorted(fnames)
+
+
+@export.add(('bcr-rlzs', 'csv'))
+def export_bcr_map(ekey, dstore):
+    assetcol = dstore['assetcol/array'].value
+    aref = dstore['asset_refs'].value
+    bcr_data = dstore['bcr-rlzs']
+    N, R = bcr_data.shape
+    realizations = dstore['csm_info'].get_rlzs_assoc().realizations
+    loss_types = dstore.get_attr('composite_risk_model', 'loss_types')
+    fnames = []
+    writer = writers.CsvWriter(fmt=writers.FIVEDIGITS)
+    for rlz in realizations:
+        for l, loss_type in enumerate(loss_types):
+            rlz_data = bcr_data[loss_type][:, rlz.ordinal]
+            path = dstore.build_fname('bcr-%s' % loss_type, rlz, 'csv')
+            data = [['lon', 'lat', 'asset_ref', 'average_annual_loss_original',
+                     'average_annual_loss_retrofitted', 'bcr']]
+            for ass, value in zip(assetcol, rlz_data):
+                data.append((ass['lon'], ass['lat'],
+                             decode(aref[ass['idx']]),
+                             value['annual_loss_orig'],
+                             value['annual_loss_retro'],
+                             value['bcr']))
+            writer.save(data, path)
+            fnames.append(path)
+    return writer.getsaved()
 
 # TODO: add export_bcr_map_stats
