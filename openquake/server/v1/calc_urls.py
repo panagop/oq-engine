@@ -24,8 +24,8 @@ from openquake.server import views
 urlpatterns = [
     url(r'^list$', views.calc),
     url(r'^(\d+)$', views.calc_info),
-    url(r'^(\d+)/loss_curves/(stats|mean|quantile-\d\.\d+|rlzs|rlz-\d+)/'
-        '(sid-\d+|ref-\w+)', views.get_loss_curves),
+    url(r'^(\d+)/loss_curves/(sid-\d+|ref-\w+)/([\w-]+)',
+        views.get_loss_curves),
     url(r'^(\d+)/datastore$', views.get_datastore),
     url(r'^(\d+)/status$', views.calc),
     url(r'^(\d+)/results$', views.calc_results),

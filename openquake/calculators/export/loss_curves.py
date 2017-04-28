@@ -57,14 +57,9 @@ class LossCurveExporter(object):
     def parse(self, what):
         """
         :param what:
-            can be 'rlz-1/ref-asset1', 'rlzs/sid-2', ...
+            can be 'ref-asset1/rlz-1', 'sid-2/rlzs', ...
         """
-        kind, spec = what.split('/')
-        if not spec.startswith(('ref-', 'sid-')):
-            raise ValueError('Wrong specification in %s' % what)
-        if not (kind in ('rlzs', 'stats', 'mean') or kind.startswith(('rlz-'))
-                or kind.startswith('quantile-')):
-            raise ValueError('Wrong export key in %s' % what)
+        spec, kind = what.split('/')
         if spec.startswith('sid-'):  # passed the site ID
             sid = int(spec[4:])
             aids = []
@@ -73,9 +68,11 @@ class LossCurveExporter(object):
                 if rec['site_id'] == sid:
                     aids.append(aid)
                     arefs.append(self.asset_refs[rec['idx']])
-        else:  # passed the asset name
+        elif spec.startswith('ref-'):  # passed the asset name
             arefs = [spec[4:]]
             aids = [self.str2asset[arefs[0]].ordinal]
+        else:
+            raise ValueError('Wrong specification in %s' % what)
         return aids, arefs, spec, kind
 
     def export_csv(self, kind, spec, asset_refs, curves_dict):
@@ -142,4 +139,12 @@ class LossCurveExporter(object):
                 s = self.stat2idx[kind]
                 return {kind: data[:, s]}
         # otherwise event_based
-        raise NotImplementedError
+        builder = self.dstore['riskmodel'].curve_builder
+        assets = [self.assetcol[aid] for aid in aids]
+        rlzi = int(key[4:]) if key else None  # strip rlz-
+        ratios = riskinput.LossRatiosGetter(self.dstore).get(aids, rlzi)
+        if rlzi:
+            return {rlzi: builder.build_curves(assets, ratios, rlzi)}
+        # return a dictionary will all realizations
+        return {'rlz-%03d' % rlzi: builder.build_curves(assets, ratios, rlzi)
+                for rlzi in range(self.R)}

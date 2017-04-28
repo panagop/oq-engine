@@ -41,7 +41,7 @@ from openquake.baselib.parallel import Starmap, safely_call
 from openquake.hazardlib import nrml, gsim
 from openquake.risklib import read_nrml
 
-from openquake.commonlib import readinput, oqvalidation, logs
+from openquake.commonlib import readinput, oqvalidation, logs, datastore
 from openquake.calculators.export import export
 from openquake.engine import __version__ as oqversion
 from openquake.engine.export import core
@@ -69,6 +69,7 @@ NOT_IMPLEMENTED = 501
 XML = 'application/xml'
 JSON = 'application/json'
 HDF5 = 'application/x-hdf'
+NPZ = 'application/octet-stream'  # or 'application/zip'?
 
 DEFAULT_LOG_LEVEL = 'info'
 
@@ -585,9 +586,12 @@ def get_loss_curves(request, job_id, kind, spec):
         job = logs.dbcmd('get_job', int(job_id), getpass.getuser())
     except dbapi.NotFound:
         return HttpResponseNotFound()
-
-    fnames = export(('loss_curves-%s/%s' % (kind, spec), 'csv'))
-    print(fnames)
+    with datastore.read(job.id) as dstore:
+        [fname] = export(('loss_curves-%s/%s' % (kind, spec), 'npz'), dstore)
+    stream = FileWrapper(open(fname, 'rb'))
+    response = FileResponse(stream, content_type=NPZ)
+    response['Content-Disposition'] = (
+        'attachment; filename=%s' % os.path.basename(fname))
     return response
 
 
