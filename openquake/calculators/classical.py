@@ -378,7 +378,7 @@ def build_hcurves_and_stats(pgetter, hstats, monitor):
     The "kind" is a string of the form 'rlz-XXX' or 'mean' of 'quantile-XXX'
     used to specify the kind of output.
     """
-    with monitor('combine pmaps'):
+    with monitor('combine pmaps'), pgetter.dstore:
         pmaps = pgetter.get_pmaps(pgetter.sids)
     pmap_by_kind = {}
     if len(pgetter.rlzs) > 1 and hstats:
@@ -424,9 +424,8 @@ class ClassicalCalculator(PSHACalculator):
             self.datastore.set_attrs('hcurves', nbytes=totbytes)
         self.datastore.flush()
 
-        logging.info('Building hazard curves')
         nbytes = parallel.Starmap(
-            self.core_task.__func__, list(self.gen_args())
+            self.core_task.__func__, self.gen_args()
         ).reduce(self.save_hcurves)
         return nbytes
 
@@ -439,10 +438,10 @@ class ClassicalCalculator(PSHACalculator):
         hstats = self.oqparam.hazard_stats()
         pgetter = calc.PmapGetter(self.datastore, self.rlzs_assoc)
         num_rlzs = len(self.rlzs_assoc.realizations)
+        eager = self.oqparam.hazard_calculation_id is None
+        # use a lazy getter only in postprocessing
         for block in self.sitecol.split_in_tiles(num_rlzs):
-            newgetter = pgetter.new(block.sids)  # read the probability maps
-            if newgetter.nbytes > 0:  # some probability map is nonzero
-                yield newgetter, hstats, monitor
+            yield pgetter.new(block.sids, eager), hstats, monitor
 
     def save_hcurves(self, acc, pmap_by_kind):
         """

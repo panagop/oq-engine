@@ -71,14 +71,16 @@ class PmapGetter(object):
         self.sids = None  # to be set
         self.nbytes = 0
 
-    def new(self, sids):
+    def new(self, sids, eager):
         """
         :param sids: an array of S site IDs
+        :param eager: True if the data is read immediately, False otherwise
         :returns: a new instance of the getter, with the cache populated
         """
         newgetter = self.__class__(self.dstore, self.rlzs_assoc)
         newgetter.sids = sids
-        newgetter.get_pmap_by_grp(sids)  # populate the cache
+        if eager:
+            newgetter.get_pmap_by_grp(sids)  # populate the cache
         return newgetter
 
     @property
