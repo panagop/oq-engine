@@ -70,6 +70,9 @@ class PmapGetter(object):
         self._pmap_by_grp = None  # cache
         self.sids = None  # to be set
         self.nbytes = 0
+        grp = list(dstore['poes'])[0]
+        dset = (dstore.parent or dstore).getitem('poes/' + grp)
+        self.num_levels = dset.shape[1]  # (N, L, I)
 
     def new(self, sids, eager):
         """
@@ -92,8 +95,7 @@ class PmapGetter(object):
         :param pmap_by_grp: dictionary group string -> probability map
         :returns: a list of probability maps, one per realization
         """
-        num_levels = probability_map.get_shape(pmap_by_grp.values())[1]
-        pmaps = [probability_map.ProbabilityMap(num_levels, 1)
+        pmaps = [probability_map.ProbabilityMap(self.num_levels, 1)
                  for rlz in self.rlzs]
         for grp in pmap_by_grp:
             grp_id = int(grp[4:])  # strip grp-
@@ -110,8 +112,7 @@ class PmapGetter(object):
         :returns: the hazard curves for the given realization
         """
         pmap_by_grp = self.get_pmap_by_grp(sids)
-        num_levels = probability_map.get_shape(pmap_by_grp.values())[1]
-        pmap = probability_map.ProbabilityMap(num_levels, 1)
+        pmap = probability_map.ProbabilityMap(self.num_levels, 1)
         for grp in pmap_by_grp:
             grp_id = int(grp[4:])  # strip grp-
             for i, gsim in enumerate(self.rlzs_assoc.gsims_by_grp_id[grp_id]):
