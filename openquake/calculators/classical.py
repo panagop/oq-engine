@@ -380,6 +380,8 @@ def build_hcurves_and_stats(pgetter, hstats, monitor):
     """
     with monitor('combine pmaps'), pgetter.dstore:
         pmaps = pgetter.get_pmaps(pgetter.sids)
+    if sum(len(pmap) for pmap in pmaps) == 0:  # no data
+        return {}
     pmap_by_kind = {}
     if len(pgetter.rlzs) > 1 and hstats:
         with monitor('compute stats'):
@@ -424,9 +426,10 @@ class ClassicalCalculator(PSHACalculator):
             self.datastore.set_attrs('hcurves', nbytes=totbytes)
         self.datastore.flush()
 
-        nbytes = parallel.Starmap(
-            self.core_task.__func__, self.gen_args()
-        ).reduce(self.save_hcurves)
+        with self.monitor('postprocessing', autoflush=True, measuremem=True):
+            nbytes = parallel.Starmap(
+                self.core_task.__func__, self.gen_args()
+            ).reduce(self.save_hcurves)
         return nbytes
 
     def gen_args(self):
