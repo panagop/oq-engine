@@ -438,10 +438,9 @@ class ClassicalCalculator(PSHACalculator):
         hstats = self.oqparam.hazard_stats()
         pgetter = calc.PmapGetter(self.datastore, self.rlzs_assoc)
         num_rlzs = len(self.rlzs_assoc.realizations)
-        eager = self.oqparam.hazard_calculation_id is None
         # use a lazy getter only in postprocessing
         for block in self.sitecol.split_in_tiles(num_rlzs):
-            yield pgetter.new(block.sids, eager), hstats, monitor
+            yield pgetter.new(block.sids), hstats, monitor
 
     def save_hcurves(self, acc, pmap_by_kind):
         """
