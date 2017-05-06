@@ -69,6 +69,7 @@ class PmapGetter(object):
         self.rlzs_assoc = rlzs_assoc or dstore['csm_info'].get_rlzs_assoc()
         self._pmap_by_grp = None  # cache
         self.sids = None  # to be set
+        self._num_levels = None  # to be set
         self.nbytes = 0
 
     def new(self, sids):
@@ -86,13 +87,18 @@ class PmapGetter(object):
     def rlzs(self):
         return self.rlzs_assoc.realizations
 
+    @property
+    def num_levels(self):
+        if self._num_levels is None:
+            self._num_levels = len(self.dstore['oqparam'].imtls.array)
+        return self._num_levels
+
     def combine_pmaps(self, pmap_by_grp):
         """
         :param pmap_by_grp: dictionary group string -> probability map
         :returns: a list of probability maps, one per realization
         """
-        num_levels = len(self.dstore['oqparam'].imtls.array)
-        pmaps = [probability_map.ProbabilityMap(num_levels, 1)
+        pmaps = [probability_map.ProbabilityMap(self.num_levels, 1)
                  for rlz in self.rlzs]
         for grp in pmap_by_grp:
             grp_id = int(grp[4:])  # strip grp-
@@ -108,9 +114,8 @@ class PmapGetter(object):
         :param rlzi: a realization index
         :returns: the hazard curves for the given realization
         """
-        num_levels = len(self.dstore['oqparam'].imtls.array)
         pmap_by_grp = self.get_pmap_by_grp(sids)
-        pmap = probability_map.ProbabilityMap(num_levels, 1)
+        pmap = probability_map.ProbabilityMap(self.num_levels, 1)
         for grp in pmap_by_grp:
             grp_id = int(grp[4:])  # strip grp-
             for i, gsim in enumerate(self.rlzs_assoc.gsims_by_grp_id[grp_id]):
