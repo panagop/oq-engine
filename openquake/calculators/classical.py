@@ -380,7 +380,7 @@ def build_hcurves_and_stats(pgetter, sids, hstats, monitor):
     used to specify the kind of output.
     """
     with monitor('combine pmaps'), pgetter.dstore:
-        pmaps = pgetter.get_all(pgetter.sids)
+        pmaps = pgetter.get_all(sids)
     if sum(len(pmap) for pmap in pmaps) == 0:  # no data
         return {}
     pmap_by_kind = {}
