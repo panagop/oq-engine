@@ -124,7 +124,7 @@ class ClassicalRiskCalculator(base.RiskCalculator):
             sids = self.sitecol.complete.sids
             with self.monitor(
                     'combining hcurves', measuremem=True, autoflush=True):
-                pmaps = pgetter.get_pmaps(sids)
+                pmaps = pgetter.get_all(sids)
                 curves = {rlz: pmap.convert(oq.imtls, len(sids))
                           for rlz, pmap in zip(pgetter.rlzs, pmaps)}
         with self.monitor('build riskinputs', measuremem=True, autoflush=True):

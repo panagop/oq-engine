@@ -51,7 +51,7 @@ def get_hcurves_and_means(dstore):
     """
     getter = calc.PmapGetter(dstore)
     sitecol = dstore['sitecol']
-    pmaps = getter.get_pmaps(sitecol.sids)
+    pmaps = getter.get_all(sitecol.sids)
     return dict(zip(getter.rlzs, pmaps)), dstore['hcurves/mean']
 
 
@@ -88,7 +88,7 @@ def show(what, calc_id=-1):
         min_value = 0.01  # used in rmsep
         getter = calc.PmapGetter(ds)
         sitecol = ds['sitecol']
-        pmaps = getter.get_pmaps(sitecol.sids)
+        pmaps = getter.get_all(sitecol.sids)
         weights = [rlz.weight for rlz in getter.rlzs]
         mean = stats.compute_pmap_stats(pmaps, [numpy.mean], weights)
         dists = []

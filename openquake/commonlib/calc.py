@@ -86,10 +86,16 @@ class PmapGetter(object):
 
     @property
     def rlzs(self):
+        """
+        Return the list of realizations
+        """
         return self.rlzs_assoc.realizations
 
     @property
     def num_levels(self):
+        """
+        Read the number of levels in the hazard curves form the datastore
+        """
         if self._num_levels is None:
             self._num_levels = len(self.dstore['oqparam'].imtls.array)
         return self._num_levels
@@ -126,7 +132,7 @@ class PmapGetter(object):
                         break
         return pmap
 
-    def get_pmaps(self, sids):  # used in classical
+    def get_all(self, sids):  # used in classical
         """
         :param sids: an array of S site IDs
         :returns: a list of R probability maps

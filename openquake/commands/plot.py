@@ -56,9 +56,9 @@ def make_figure(indices, n, imtls, spec_curves, curves=(), label=''):
     return plt
 
 
-def get_pmaps(dstore, indices):
+def get_all(dstore, indices):
     getter = calc.PmapGetter(dstore)
-    pmaps = getter.get_pmaps(indices)
+    pmaps = getter.get_all(indices)
     weights = [rlz.weight for rlz in getter.rlzs]
     mean = compute_pmap_stats(pmaps, [mean_curve], weights)
     return mean, pmaps
@@ -81,13 +81,13 @@ def plot(calc_id, other_id=None, sites='0'):
     valid = sorted(set(range(n_sites)) & set(indices))
     print('Found %d site(s); plotting %d of them' % (n_sites, len(valid)))
     if other is None:
-        mean_curves, pmaps = get_pmaps(haz, indices)
+        mean_curves, pmaps = get_all(haz, indices)
         single_curve = len(pmaps) == 1
         plt = make_figure(valid, n_sites, oq.imtls, mean_curves,
                           [] if single_curve else pmaps, 'mean')
     else:
-        mean1, _ = get_pmaps(haz, indices)
-        mean2, _ = get_pmaps(other, indices)
+        mean1, _ = get_all(haz, indices)
+        mean2, _ = get_all(other, indices)
         plt = make_figure(valid, n_sites, oq.imtls, mean1,
                           [mean2], 'reference')
     plt.show()

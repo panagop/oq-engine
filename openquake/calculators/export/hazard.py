@@ -377,7 +377,7 @@ def _comment(rlzs_assoc, kind, investigation_time):
 
 
 def build_hcurves(getter, imtls, monitor):
-    pmaps = getter.get_pmaps(getter.sids)
+    pmaps = getter.get_all(getter.sids)
     idx = dict(zip(getter.sids, range(len(getter.sids))))
     curves = numpy.zeros((len(getter.sids), len(pmaps)), imtls.dt)
     for r, pmap in enumerate(pmaps):

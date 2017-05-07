@@ -69,7 +69,7 @@ def plot_uhs(calc_id, sites='0'):
         print('The indices %s are invalid: no graph for them' % invalid)
     valid = sorted(set(range(n_sites)) & set(indices))
     print('Found %d site(s); plotting %d of them' % (n_sites, len(valid)))
-    pmaps = getter.get_pmaps(numpy.array(indices))
+    pmaps = getter.get_all(numpy.array(indices))
     plt = make_figure(valid, n_sites, oq.imtls, oq.poes, pmaps)
     plt.show()
 
