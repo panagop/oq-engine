@@ -148,8 +148,8 @@ class PmapGetter(object):
             self._pmap_by_grp = {}
             for grp, dset in self.dstore['poes'].items():
                 sid2idx = {sid: i for i, sid in enumerate(dset.attrs['sids'])}
-                L, I = dset.shape[1:]
-                pmap = probability_map.ProbabilityMap(L, I)
+                pmap = probability_map.ProbabilityMap(
+                    self.num_levels, dset.shape[2])
                 for sid in sids:
                     try:
                         idx = sid2idx[sid]
