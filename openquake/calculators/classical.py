@@ -440,11 +440,11 @@ class ClassicalCalculator(PSHACalculator):
         monitor = self.monitor('build_hcurves_and_stats')
         hstats = self.oqparam.hazard_stats()
         pgetter = calc.PmapGetter(self.datastore, self.rlzs_assoc)
-        num_rlzs = len(self.rlzs_assoc.realizations)
+        ct = self.oqparam.concurrent_tasks
         eager = (self.oqparam.hazard_calculation_id is None or
                  'risk' in self.oqparam.calculation_mode)
         # use a lazy pgetter only in hazard postprocessing
-        for block in self.sitecol.split_in_tiles(num_rlzs):
+        for block in self.sitecol.split_in_tiles(ct):
             yield pgetter.new(block.sids, eager), hstats, monitor
 
     def save_hcurves(self, acc, pmap_by_kind):
