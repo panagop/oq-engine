@@ -81,6 +81,7 @@ class PmapGetter(object):
         newgetter = self.__class__(self.dstore, self.rlzs_assoc)
         newgetter.sids = sids
         if eager:
+            print('reading pmaps')
             newgetter.get_pmap_by_grp(sids)  # populate the cache
         return newgetter
 
