@@ -144,6 +144,11 @@ class PmapGetter(object):
         :param sids: an array of site IDs
         :returns: a dictionary of probability maps by source group
         """
+        if sids is not None and self.sids is not None:
+            # make sure the cache refer to the right sids
+            assert (sids == self.sids).all()
+        elif sids is None:
+            sids = self.sids
         if self._pmap_by_grp is None:  # populate the cache
             self.rlzs  # read rlzs_assoc if needed
             self._pmap_by_grp = {}
@@ -161,9 +166,6 @@ class PmapGetter(object):
                 self._pmap_by_grp[grp] = pmap
                 self.sids = sids  # store the sids used in the cache
                 self.nbytes += pmap.nbytes
-        else:
-            # make sure the cache refer to the right sids
-            assert sids is None or (sids == self.sids).all()
         return self._pmap_by_grp
 
     def items(self, kind=''):
