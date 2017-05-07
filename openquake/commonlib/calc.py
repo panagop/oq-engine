@@ -66,23 +66,20 @@ class PmapGetter(object):
     """
     def __init__(self, dstore, rlzs_assoc=None):
         self.dstore = dstore
-        self.rlzs_assoc = rlzs_assoc or dstore['csm_info'].get_rlzs_assoc()
+        self.rlzs_assoc = rlzs_assoc
         self._pmap_by_grp = None  # cache
         self.sids = None  # to be set
         self._num_levels = None  # to be set
         self.nbytes = 0
 
-    def new(self, sids, eager=True):
+    def new(self, sids):
         """
         :param sids: an array of S site IDs
-        :param eager: True if the data is read immediately, false otherwise
         :returns: a new instance of the getter, with the cache populated
         """
         newgetter = self.__class__(self.dstore, self.rlzs_assoc)
         newgetter.sids = sids
-        if eager:
-            print('reading pmaps')
-            newgetter.get_pmap_by_grp(sids)  # populate the cache
+        newgetter.get_pmap_by_grp(sids)  # populate the cache
         return newgetter
 
     @property
@@ -90,6 +87,8 @@ class PmapGetter(object):
         """
         Return the list of realizations
         """
+        if self.rlzs_assoc is None:
+            self.rlzs_assoc = self.dstore['csm_info'].get_rlzs_assoc()
         return self.rlzs_assoc.realizations
 
     @property
@@ -146,6 +145,7 @@ class PmapGetter(object):
         :returns: a dictionary of probability maps by source group
         """
         if self._pmap_by_grp is None:  # populate the cache
+            self.rlzs  # read rlzs_assoc if needed
             self._pmap_by_grp = {}
             for grp, dset in self.dstore['poes'].items():
                 sid2idx = {sid: i for i, sid in enumerate(dset.attrs['sids'])}
