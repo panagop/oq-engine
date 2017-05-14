@@ -278,20 +278,20 @@ class EbrPostCalculator(base.RiskCalculator):
         lts = self.riskmodel.loss_types
         cb_inputs = self.cb_inputs('agg_loss_table')
         I = oq.insured_losses + 1
-        R = len(self.rlzs_assoc.realizations)
+        rlzs = self.rlzs_assoc.realizations
         # NB: using the Processmap since celery is hanging; the computation
         # is fast anyway and this part will likely be removed in the future
         result = parallel.Processmap.apply(
             build_agg_curve, (cb_inputs, self.monitor('')),
             concurrent_tasks=self.oqparam.concurrent_tasks).reduce()
-        agg_curve = numpy.zeros((I, R), loss_curve_dt)
+        agg_curve = numpy.zeros((I, len(rlzs)), loss_curve_dt)
         for l, r, i in result:
             agg_curve[lts[l]][i, r] = result[l, r, i]
         self.datastore['agg_curve-rlzs'] = agg_curve
 
-        if R > 1:  # save stats too
+        if len(rlzs) > 1:  # save stats too
             statnames, stats = zip(*oq.risk_stats())
-            weights = self.datastore['realizations']['weight']
+            weights = [rlz.weight for rlz in rlzs]
             agg_curve_stats = numpy.zeros((I, len(stats)), agg_curve.dtype)
             for l, loss_type in enumerate(agg_curve.dtype.names):
                 acs = agg_curve_stats[loss_type]
